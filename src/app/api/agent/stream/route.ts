@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { streamResponse } from "@/services/agentService";
 import type { MessageResponse, FileAttachment } from "@/types/message";
+import { getThreadOwner } from "@/lib/threadOwner";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -19,7 +20,8 @@ interface StreamPayload {
   neutralContextSummary?: string;
 }
 
-function streamAgent(payload: StreamPayload) {
+function streamAgent(req: NextRequest, payload: StreamPayload) {
+  const owner = getThreadOwner(req);
   const encoder = new TextEncoder();
   const abortController = new AbortController();
   let isClosed = false;
@@ -39,6 +41,7 @@ function streamAgent(payload: StreamPayload) {
           const iterable = await streamResponse({
             threadId: payload.threadId || "unknown",
             userText: payload.content || "",
+            ownerId: owner.ownerId,
             signal: abortController.signal,
             opts: {
               model: payload.model,
@@ -87,7 +90,7 @@ function streamAgent(payload: StreamPayload) {
     },
   });
 
-  return new Response(stream, {
+  const response = new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
@@ -95,6 +98,13 @@ function streamAgent(payload: StreamPayload) {
       "X-Accel-Buffering": "no",
     },
   });
+  if (owner.shouldSetCookie) {
+    response.headers.append(
+      "Set-Cookie",
+      `gptone_owner_id=${owner.ownerId}; Path=/; Max-Age=31536000; SameSite=Lax; HttpOnly${process.env.NODE_ENV === "production" ? "; Secure" : ""}`,
+    );
+  }
+  return response;
 }
 
 /**
@@ -115,7 +125,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return streamAgent({
+  return streamAgent(req, {
     content: searchParams.get("content") || "",
     threadId: searchParams.get("threadId") || "unknown",
     model: searchParams.get("model") || undefined,
@@ -135,5 +145,5 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => ({}))) as StreamPayload;
-  return streamAgent(body);
+  return streamAgent(req, body);
 }

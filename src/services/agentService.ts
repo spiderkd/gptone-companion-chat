@@ -15,11 +15,12 @@ import { buildPersonaSystemPrompt } from "@/lib/personas";
 export async function streamResponse(params: {
   threadId: string;
   userText: string;
+  ownerId: string;
   opts?: MessageOptions;
   signal?: AbortSignal;
 }) {
-  const { threadId, userText, opts, signal } = params;
-  const thread = await ensureThread(threadId, userText, opts?.personaId);
+  const { threadId, userText, ownerId, opts, signal } = params;
+  const thread = await ensureThread(threadId, userText, opts?.personaId, ownerId);
   const threadPersonaId = thread.personaId || opts?.personaId;
 
   // If allowTool is present, use Command with resume action instead of regular inputs
@@ -322,8 +323,11 @@ function processToolMessage(message: Record<string, unknown>): MessageResponse |
 }
 
 /** Fetch prior messages for a thread from the LangGraph checkpoint/memory system. */
-export async function fetchThreadHistory(threadId: string): Promise<MessageResponse[]> {
-  const thread = await prisma.thread.findUnique({ where: { id: threadId } });
+export async function fetchThreadHistory(
+  threadId: string,
+  ownerId: string,
+): Promise<MessageResponse[]> {
+  const thread = await prisma.thread.findFirst({ where: { id: threadId, ownerId } });
   if (!thread) return [];
   try {
     const history = await getHistory(threadId);

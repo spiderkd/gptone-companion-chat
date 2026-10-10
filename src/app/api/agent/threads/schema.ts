@@ -7,6 +7,7 @@ export const ThreadResponse = z
   .object({
     id: z.string().openapi({ example: "clx123abc" }),
     title: z.string().openapi({ example: "New thread" }),
+    personaId: z.string().openapi({ example: "efficient" }),
     createdAt: z.string().datetime().openapi({ example: "2026-06-19T12:00:00.000Z" }),
     updatedAt: z.string().datetime().openapi({ example: "2026-06-19T12:00:00.000Z" }),
   })

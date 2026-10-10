@@ -12,10 +12,13 @@ datasource db {
 
 model Thread {
   id        String   @id @default(uuid())
+  ownerId   String   @default("legacy")
   title     String
   personaId String   @default("efficient")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@index([ownerId, updatedAt])
 }
 
 model MCPServer {
