@@ -1,5 +1,5 @@
 import { DEFAULT_SYSTEM_PROMPT as SYSTEM_PROMPT } from "./prompt";
-import { postgresCheckpointer } from "./memory";
+import { ensurePostgresMemory, postgresCheckpointer } from "./memory";
 import type { DynamicTool, StructuredToolInterface } from "@langchain/core/tools";
 import {
   AgentConfigOptions,
@@ -9,25 +9,6 @@ import {
 } from "./util";
 import { getMCPTools } from "./mcp";
 import { AgentBuilder } from "./builder";
-
-let setupPromise: Promise<void> | null = null;
-
-/**
- * One-time initialization for the Postgres checkpointer.
- * Ensures the underlying table/extension are ready before any agent runs.
- * This is called automatically when creating an agent via `getAgent` or `ensureAgent`.
- */
-async function setupOnce() {
-  if (!setupPromise) {
-    setupPromise = postgresCheckpointer.setup().catch((err) => {
-      // Reset so a future call can retry if initial setup failed.
-      setupPromise = null;
-      console.error("Failed to setup postgres checkpointer:", err);
-      throw err;
-    });
-  }
-  await setupPromise;
-}
 
 /**
  * Create a new agent instance with the given configuration.
@@ -59,7 +40,7 @@ async function createAgent(cfg?: AgentConfigOptions) {
 // Public helper if explicit readiness is ever needed elsewhere.
 export async function ensureAgent(cfg?: AgentConfigOptions) {
   // Ensure checkpointer is ready before returning an agent instance.
-  await setupOnce();
+  await ensurePostgresMemory();
   return createAgent(cfg);
 }
 

@@ -46,7 +46,7 @@ export async function streamResponse(params: {
     // Type assertion needed for Command union with state update in v1
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const streamOptions = {
-      streamMode: ["updates"],
+      streamMode: ["messages", "updates"],
       configurable: { thread_id: threadId },
       signal,
       stepTimeout: Number(process.env.AGENT_STEP_TIMEOUT_MS || 45000),
@@ -106,7 +106,7 @@ export async function streamResponse(params: {
   // Type assertion needed for Command union with state update in v1
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const streamOptions = {
-    streamMode: ["updates"],
+    streamMode: ["messages", "updates"],
     configurable: { thread_id: threadId },
     signal,
     stepTimeout: Number(process.env.AGENT_STEP_TIMEOUT_MS || 45000),
@@ -151,12 +151,24 @@ async function getPendingToolCalls(threadId: string): Promise<Array<{ id: string
 async function* generator(
   iterable: AsyncIterable<unknown>,
 ): AsyncGenerator<MessageResponse, void, unknown> {
+  const streamedMessageId = `ai-${crypto.randomUUID()}`;
+  let emittedText = false;
+
   for await (const chunk of iterable) {
     if (!chunk) continue;
 
     // Handle tuple format: [type, data]
     if (Array.isArray(chunk) && chunk.length === 2) {
       const [chunkType, chunkData] = chunk;
+
+      if (chunkType === "messages") {
+        const tokenMessage = processStreamMessageChunk(chunkData, streamedMessageId);
+        if (tokenMessage) {
+          emittedText = true;
+          yield tokenMessage;
+        }
+        continue;
+      }
 
       if (
         chunkType === "updates" &&
@@ -165,11 +177,38 @@ async function* generator(
         !Array.isArray(chunkData)
       ) {
         // Handle updates: ['updates', { agent: { messages: [Array] } }]
-        yield* processNodeMessages(chunkData, "agent", processAIMessage);
+        yield* processNodeMessages(chunkData, "agent", (message) =>
+          processAIMessage(message, { skipPlainText: emittedText }),
+        );
         yield* processNodeMessages(chunkData, "tools", processToolMessage);
       }
     }
   }
+}
+
+function processStreamMessageChunk(
+  chunkData: unknown,
+  fallbackId: string,
+): MessageResponse | null {
+  if (!Array.isArray(chunkData) || chunkData.length < 1) return null;
+
+  const [message, metadata] = chunkData as [
+    Record<string, unknown> | undefined,
+    Record<string, unknown> | undefined,
+  ];
+  if (!message || typeof message !== "object") return null;
+  if (metadata?.langgraph_node && metadata.langgraph_node !== "agent") return null;
+
+  const text = extractTextContent(message.content);
+  if (!text) return null;
+
+  return {
+    type: "ai",
+    data: {
+      id: fallbackId,
+      content: text,
+    },
+  };
 }
 
 async function* processNodeMessages(
@@ -198,7 +237,10 @@ async function* processNodeMessages(
 }
 
 // Helper function to process any AI message and return the appropriate MessageResponse
-function processAIMessage(message: Record<string, unknown>): MessageResponse | null {
+function processAIMessage(
+  message: Record<string, unknown>,
+  options?: { skipPlainText?: boolean },
+): MessageResponse | null {
   const toolCalls = Array.isArray(message.tool_calls) ? (message.tool_calls as ToolCall[]) : [];
 
   // Check both OpenAI-style tool_calls and Gemini-style content functionCall blocks.
@@ -222,17 +264,9 @@ function processAIMessage(message: Record<string, unknown>): MessageResponse | n
       },
     };
   } else {
-    // Handle regular text content - extract text from various content types
-    let text = "";
-    if (typeof message.content === "string") {
-      text = message.content;
-    } else if (Array.isArray(message.content)) {
-      text = message.content
-        .map((c: string | { text?: string }) => (typeof c === "string" ? c : c?.text || ""))
-        .join("");
-    } else {
-      text = String(message.content ?? "");
-    }
+    if (options?.skipPlainText) return null;
+
+    const text = extractTextContent(message.content);
 
     // Only return message if we have actual text content
     if (text.trim()) {
@@ -243,6 +277,23 @@ function processAIMessage(message: Record<string, unknown>): MessageResponse | n
     }
   }
   return null;
+}
+
+function extractTextContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item && typeof item === "object" && "text" in item) {
+          const text = (item as { text?: unknown }).text;
+          return typeof text === "string" ? text : "";
+        }
+        return "";
+      })
+      .join("");
+  }
+  return typeof content === "undefined" || content === null ? "" : String(content);
 }
 
 function processToolMessage(message: Record<string, unknown>): MessageResponse | null {

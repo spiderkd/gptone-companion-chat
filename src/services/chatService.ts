@@ -48,13 +48,24 @@ export function createMessageStream(
   opts?: MessageOptions,
 ): MessageStream {
   const controller = new AbortController();
+  const pendingMessages: MessageEvent<string>[] = [];
+  let onMessageHandler: ((event: MessageEvent<string>) => void) | null = null;
   const listeners: Record<"done" | "error", Array<(event: MessageEvent<string>) => void>> = {
     done: [],
     error: [],
   };
 
   const stream: MessageStream = {
-    onmessage: null,
+    get onmessage() {
+      return onMessageHandler;
+    },
+    set onmessage(handler) {
+      onMessageHandler = handler;
+      if (!handler) return;
+      while (pendingMessages.length > 0) {
+        handler(pendingMessages.shift()!);
+      }
+    },
     addEventListener: (event, callback) => {
       listeners[event].push(callback);
     },
@@ -64,7 +75,11 @@ export function createMessageStream(
   const emit = (event: "message" | "done" | "error", data: string) => {
     const messageEvent = new MessageEvent(event, { data });
     if (event === "message") {
-      stream.onmessage?.(messageEvent);
+      if (onMessageHandler) {
+        onMessageHandler(messageEvent);
+      } else {
+        pendingMessages.push(messageEvent);
+      }
       return;
     }
     listeners[event].forEach((listener) => listener(messageEvent));
