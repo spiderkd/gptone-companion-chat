@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Check, Pause, Play, RotateCcw, Sparkles, X } fro
 import { ChatCompanion } from "@/components/characters/ChatCompanion";
 import { getCharacter } from "@/lib/characters";
 import { getPersona } from "@/lib/personas";
+import { DemoFlow } from "./DemoFlow";
 import {
   DISMISS_COOLDOWN_MESSAGES,
   MIN_USER_MESSAGES_BEFORE_SUGGEST,
@@ -45,6 +46,8 @@ const calmReply =
   "Let's keep it easy: pick a favourite colour for the table, put on a shared playlist, and play a simple drawing-and-guessing game. You don't need a big theme for it to feel special.";
 
 export default function DemoPage() {
+  return <DemoFlow />;
+
   const [step, setStep] = useState(0);
   const [initialPersona, setInitialPersona] = useState("calm");
   const [decision, setDecision] = useState<"yes" | "no" | null>(null);
