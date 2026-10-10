@@ -6,7 +6,7 @@ import { UploadErrorResponse } from "@/lib/api/openapi/common";
 export const UploadResponse = z
   .object({
     success: z.literal(true),
-    url: z.string().openapi({ description: "Download URL" }),
+    url: z.string().openapi({ description: "Private application download URL" }),
     key: z.string().openapi({ description: "Object key (uuid + extension)" }),
     name: z.string().openapi({ description: "Original filename" }),
     type: z.string().openapi({ example: "image/png" }),

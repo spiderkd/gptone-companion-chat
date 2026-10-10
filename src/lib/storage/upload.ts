@@ -44,14 +44,15 @@ function buildContentDispositionAttachment(originalFilename: string): string | u
  * @param key Unique file key (path in bucket)
  * @param contentType MIME type of the file
  * @param originalFilename Original filename for Content-Disposition header
- * @returns Public URL of the uploaded file
+ * The object remains private. Callers should store the object key and resolve
+ * access through the application's authenticated file route.
  */
 export async function uploadFile(
   buffer: Buffer,
   key: string,
   contentType: string,
   originalFilename?: string,
-): Promise<string> {
+): Promise<void> {
   const contentDisposition = originalFilename
     ? buildContentDispositionAttachment(originalFilename)
     : undefined;
@@ -66,10 +67,6 @@ export async function uploadFile(
   });
 
   await s3Client.send(command);
-
-  // Return public URL (MinIO bucket is set to public download in compose.yaml)
-  const endpoint = process.env.S3_ENDPOINT || "";
-  return `${endpoint}/${BUCKET_NAME}/${key}`;
 }
 
 /**
@@ -78,14 +75,15 @@ export async function uploadFile(
  * @param key Unique file key (path in bucket)
  * @param contentType MIME type of the file
  * @param originalFilename Original filename for Content-Disposition header
- * @returns Public URL of the uploaded file
+ * The object remains private. Callers should store the object key and resolve
+ * access through the application's authenticated file route.
  */
 export async function uploadLargeFile(
   buffer: Buffer,
   key: string,
   contentType: string,
   originalFilename?: string,
-): Promise<string> {
+): Promise<void> {
   const contentDisposition = originalFilename
     ? buildContentDispositionAttachment(originalFilename)
     : undefined;
@@ -106,9 +104,6 @@ export async function uploadLargeFile(
   });
 
   await upload.done();
-
-  const endpoint = process.env.S3_ENDPOINT || "";
-  return `${endpoint}/${BUCKET_NAME}/${key}`;
 }
 
 /**

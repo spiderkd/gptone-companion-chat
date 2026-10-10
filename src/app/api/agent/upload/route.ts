@@ -62,14 +62,22 @@ export async function POST(request: NextRequest) {
 
     // Upload to S3/MinIO (use multipart for files > 5MB)
     // Pass original filename for Content-Disposition header
-    const url =
-      file.size > 5 * 1024 * 1024
-        ? await uploadLargeFile(buffer, key, file.type, file.name)
-        : await uploadFile(buffer, key, file.type, file.name);
+    if (file.size > 5 * 1024 * 1024) {
+      await uploadLargeFile(buffer, key, file.type, file.name);
+    } else {
+      await uploadFile(buffer, key, file.type, file.name);
+    }
+
+    // Keep attachment metadata portable across local MinIO and private cloud
+    // storage. The browser resolves this through our server-side file proxy.
+    const fileUrl = new URL("/api/agent/files", request.url);
+    fileUrl.searchParams.set("key", key);
+    fileUrl.searchParams.set("name", file.name);
+    fileUrl.searchParams.set("type", file.type);
 
     return NextResponse.json({
       success: true,
-      url,
+      url: `${fileUrl.pathname}${fileUrl.search}`,
       key,
       name: file.name,
       type: file.type,
